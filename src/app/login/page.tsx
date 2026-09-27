@@ -38,7 +38,12 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/");
+      if (data.user?.role === "ADMIN") {
+        router.push("/admin");
+      } else {
+        router.push("/");
+      }
+
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -50,7 +55,6 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6 py-12">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="mb-8 text-center">
           <Link
             href="/"
@@ -64,7 +68,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Login Card */}
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-lg">
           <h1 className="text-2xl font-bold text-slate-900">
             Welcome back
@@ -74,11 +77,7 @@ export default function LoginPage() {
             Login to access your account.
           </p>
 
-          <form
-            onSubmit={handleSubmit}
-            className="mt-8 space-y-5"
-          >
-            {/* Email */}
+          <form onSubmit={handleSubmit} className="mt-8 space-y-5">
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
                 Email
@@ -94,7 +93,6 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Password */}
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
                 Password
@@ -110,14 +108,12 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Error */}
             {error && (
               <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
                 {error}
               </div>
             )}
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
@@ -127,7 +123,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Signup */}
           <div className="mt-6 border-t border-slate-200 pt-6 text-center">
             <p className="text-sm text-slate-500">
               Don't have an account?{" "}
@@ -141,7 +136,6 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Back */}
         <div className="mt-6 text-center">
           <Link
             href="/"
