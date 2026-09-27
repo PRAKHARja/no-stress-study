@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
+
 import { prisma } from "@/lib/prisma";
+import { verifySession } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import BuyNowButton from "@/components/BuyNowButton";
 
@@ -27,6 +30,33 @@ export default async function ProductPage({
   if (!product) {
     notFound();
   }
+
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get("session")?.value;
+
+  let purchaseId: string | null = null;
+
+  if (sessionToken) {
+    const session = await verifySession(sessionToken);
+
+    if (session) {
+      const purchase = await prisma.purchase.findUnique({
+        where: {
+          userId_productId: {
+            userId: session.userId,
+            productId: product.id,
+          },
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      purchaseId = purchase?.id ?? null;
+    }
+  }
+
+  const hasPurchased = Boolean(purchaseId);
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -89,13 +119,28 @@ export default async function ProductPage({
             </div>
 
             <div className="mt-8">
-              <BuyNowButton
-                productId={product.id}
-              />
+              {hasPurchased && purchaseId ? (
+                <>
+                  <Link
+                    href={`/api/purchases/${purchaseId}/access`}
+                    className="block w-full rounded-xl bg-indigo-600 px-6 py-4 text-center text-lg font-semibold text-white transition hover:bg-indigo-700"
+                  >
+                    View Study Material
+                  </Link>
 
-              <p className="mt-3 text-center text-sm text-slate-500">
-                Secure digital access after purchase
-              </p>
+                  <p className="mt-3 text-center text-sm text-slate-500">
+                    You already own this study material
+                  </p>
+                </>
+              ) : (
+                <>
+                  <BuyNowButton productId={product.id} />
+
+                  <p className="mt-3 text-center text-sm text-slate-500">
+                    Secure digital access after purchase
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="mt-8 rounded-xl border border-slate-200 bg-white p-5">
