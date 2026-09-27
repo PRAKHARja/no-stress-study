@@ -7,6 +7,8 @@ import { verifySession } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
 import BuyNowButton from "@/components/BuyNowButton";
 
+export const dynamic = "force-dynamic";
+
 type ProductPageProps = {
   params: Promise<{
     slug: string;
@@ -81,9 +83,7 @@ export default async function ProductPage({
                 />
               ) : (
                 <div className="text-center">
-                  <div className="text-7xl">
-                    📚
-                  </div>
+                  <div className="text-7xl">📚</div>
 
                   <p className="mt-4 text-sm font-medium text-indigo-500">
                     Study Material
@@ -149,17 +149,9 @@ export default async function ProductPage({
               </h2>
 
               <ul className="mt-3 space-y-2 text-sm text-slate-600">
-                <li>
-                  ✓ Instant digital access after payment
-                </li>
-
-                <li>
-                  ✓ Secure study material
-                </li>
-
-                <li>
-                  ✓ Access from your account
-                </li>
+                <li>✓ Instant digital access after payment</li>
+                <li>✓ Secure study material</li>
+                <li>✓ Access from your account</li>
               </ul>
             </div>
           </div>
