@@ -51,6 +51,15 @@ export default function AdminLayout({
           >
             Coupons
           </Link>
+
+          <div className="my-4 border-t border-slate-700" />
+
+          <Link
+            href="/api/admin/preview"
+            className="block rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white transition hover:bg-indigo-500"
+          >
+            👁 View User Site
+          </Link>
         </nav>
       </aside>
 

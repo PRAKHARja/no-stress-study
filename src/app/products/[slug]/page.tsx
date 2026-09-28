@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 
 import { prisma } from "@/lib/prisma";
 import { verifySession } from "@/lib/auth";
+import { getFileUrl } from "@/lib/r2";
 import SiteHeader from "@/components/SiteHeader";
 import BuyNowButton from "@/components/BuyNowButton";
 
@@ -28,30 +29,63 @@ export default async function ProductPage({
   }
 
   const cookieStore = await cookies();
+
   const sessionToken =
     cookieStore.get("session")?.value;
 
+  const adminPreviewCookie =
+    cookieStore.get("admin-preview")?.value;
+
   let purchaseId: string | null = null;
+  let isAdmin = false;
 
   if (sessionToken) {
-    const session = await verifySession(sessionToken);
+    const session = await verifySession(
+      sessionToken
+    );
 
     if (session) {
-      const purchase =
-        await prisma.purchase.findUnique({
-          where: {
-            userId_productId: {
-              userId: session.userId,
-              productId: product.id,
-            },
-          },
-          select: {
-            id: true,
-          },
-        });
+      const user = await prisma.user.findUnique({
+        where: {
+          id: session.userId,
+        },
+        select: {
+          role: true,
+        },
+      });
 
-      purchaseId = purchase?.id ?? null;
+      isAdmin = user?.role === "ADMIN";
+
+      if (!isAdmin) {
+        const purchase =
+          await prisma.purchase.findUnique({
+            where: {
+              userId_productId: {
+                userId: session.userId,
+                productId: product.id,
+              },
+            },
+            select: {
+              id: true,
+            },
+          });
+
+        purchaseId = purchase?.id ?? null;
+      }
     }
+  }
+
+  const isAdminPreview =
+    isAdmin &&
+    adminPreviewCookie === "true";
+
+  let adminPreviewUrl: string | null = null;
+
+  if (isAdminPreview) {
+    adminPreviewUrl = await getFileUrl(
+      product.fileKey,
+      300
+    );
   }
 
   const hasPurchased = Boolean(purchaseId);
@@ -59,6 +93,30 @@ export default async function ProductPage({
   return (
     <main className="min-h-screen bg-slate-50">
       <SiteHeader />
+
+      {isAdminPreview && (
+        <div className="border-b border-amber-200 bg-amber-50">
+          <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
+            <div>
+              <p className="text-sm font-semibold text-amber-900">
+                Admin Preview Mode
+              </p>
+
+              <p className="text-xs text-amber-700">
+                You are viewing the customer site with
+                all study materials unlocked.
+              </p>
+            </div>
+
+            <Link
+              href="/admin"
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Back to Admin
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="mx-auto max-w-7xl px-6 py-10">
         <Link
@@ -117,7 +175,25 @@ export default async function ProductPage({
             </div>
 
             <div className="mt-8">
-              {hasPurchased && purchaseId ? (
+              {isAdminPreview &&
+              adminPreviewUrl ? (
+                <>
+                  <a
+                    href={adminPreviewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-full rounded-xl bg-indigo-600 px-6 py-4 text-center text-lg font-semibold text-white transition hover:bg-indigo-700"
+                  >
+                    View Study Material
+                  </a>
+
+                  <p className="mt-3 text-center text-sm text-amber-700">
+                    Admin preview — this material is
+                    unlocked for you.
+                  </p>
+                </>
+              ) : hasPurchased &&
+                purchaseId ? (
                 <>
                   <Link
                     href={`/api/purchases/${purchaseId}/access`}
