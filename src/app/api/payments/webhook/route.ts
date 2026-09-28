@@ -38,12 +38,12 @@ export async function POST(request: Request) {
     }
 
     // --------------------------------------------------
-    // 2. Read the raw request body
+    // 2. Read raw request body
     // --------------------------------------------------
     const rawBody = await request.text();
 
     // --------------------------------------------------
-    // 3. Get Razorpay webhook signature
+    // 3. Get webhook signature
     // --------------------------------------------------
     const signature = request.headers.get(
       "x-razorpay-signature"
@@ -152,7 +152,7 @@ export async function POST(request: Request) {
     }
 
     // --------------------------------------------------
-    // 8. Find our local order
+    // 8. Find local order
     // --------------------------------------------------
     const order = await prisma.order.findUnique({
       where: {
@@ -166,8 +166,6 @@ export async function POST(request: Request) {
         razorpayOrderId
       );
 
-      // Return 200 so Razorpay doesn't repeatedly retry
-      // an event for an order that does not exist locally.
       return NextResponse.json({
         success: true,
         message: "Order not found locally",
@@ -187,7 +185,7 @@ export async function POST(request: Request) {
     }
 
     // --------------------------------------------------
-    // 9. Verify payment amount against our database
+    // 9. Verify payment amount
     // --------------------------------------------------
     if (verifiedPayment.amount !== order.amount) {
       console.error(
@@ -206,15 +204,8 @@ export async function POST(request: Request) {
     }
 
     // --------------------------------------------------
-    // 10. Create a deterministic webhook event ID
+    // 10. Deterministic webhook event ID
     // --------------------------------------------------
-    //
-    // Razorpay webhook payloads do not always expose a
-    // universal event ID in the same way across setups.
-    //
-    // For payment.captured we use the payment ID +
-    // event name as our idempotency key.
-    //
     const eventId =
       `${event}:${razorpayPaymentId}`;
 
@@ -223,10 +214,10 @@ export async function POST(request: Request) {
     // --------------------------------------------------
     const result = await prisma.$transaction(
       async (tx) => {
-        // Attempt to record the webhook event first.
+        // Record webhook event first.
         //
-        // If the same event is delivered again, the
-        // unique constraint prevents duplicate processing.
+        // A duplicate webhook cannot process the
+        // purchase or coupon usage again.
         try {
           await tx.paymentWebhook.create({
             data: {
@@ -237,6 +228,7 @@ export async function POST(request: Request) {
         } catch {
           return {
             alreadyProcessed: true,
+            couponUsageUpdated: false,
           };
         }
 
@@ -258,15 +250,16 @@ export async function POST(request: Request) {
           );
         }
 
-        // Already paid means there is nothing else to do.
+        // If browser verification already completed
+        // the payment, do nothing.
         if (currentOrder.status === "PAID") {
           return {
             alreadyProcessed: true,
+            couponUsageUpdated: false,
           };
         }
 
-        // Check whether this user already owns
-        // this product.
+        // Check whether user already owns product.
         const existingPurchase =
           await tx.purchase.findUnique({
             where: {
@@ -289,6 +282,7 @@ export async function POST(request: Request) {
 
           return {
             alreadyProcessed: true,
+            couponUsageUpdated: false,
           };
         }
 
@@ -302,7 +296,7 @@ export async function POST(request: Request) {
           },
         });
 
-        // Create the purchase.
+        // Create purchase.
         const purchase =
           await tx.purchase.create({
             data: {
@@ -312,9 +306,51 @@ export async function POST(request: Request) {
             },
           });
 
+        let couponUsageUpdated = false;
+
+        // Count coupon usage only after purchase creation.
+        if (currentOrder.couponCode) {
+          const coupon =
+            await tx.coupon.findUnique({
+              where: {
+                code: currentOrder.couponCode,
+              },
+            });
+
+          if (coupon) {
+            if (
+              coupon.usageLimit === null ||
+              coupon.usedCount < coupon.usageLimit
+            ) {
+              await tx.coupon.update({
+                where: {
+                  id: coupon.id,
+                },
+                data: {
+                  usedCount: {
+                    increment: 1,
+                  },
+                },
+              });
+
+              couponUsageUpdated = true;
+            } else {
+              console.warn(
+                "Coupon usage limit reached during webhook processing:",
+                {
+                  couponCode:
+                    currentOrder.couponCode,
+                  orderId: currentOrder.id,
+                }
+              );
+            }
+          }
+        }
+
         return {
           alreadyProcessed: false,
           purchaseId: purchase.id,
+          couponUsageUpdated,
         };
       }
     );

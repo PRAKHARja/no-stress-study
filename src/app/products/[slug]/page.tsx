@@ -10,9 +10,7 @@ import BuyNowButton from "@/components/BuyNowButton";
 export const dynamic = "force-dynamic";
 
 type ProductPageProps = {
-  params: Promise<{
-    slug: string;
-  }>;
+  params: Promise<{ slug: string }>;
 };
 
 export default async function ProductPage({
@@ -21,12 +19,8 @@ export default async function ProductPage({
   const { slug } = await params;
 
   const product = await prisma.product.findUnique({
-    where: {
-      slug,
-    },
-    include: {
-      category: true,
-    },
+    where: { slug },
+    include: { category: true },
   });
 
   if (!product) {
@@ -34,7 +28,8 @@ export default async function ProductPage({
   }
 
   const cookieStore = await cookies();
-  const sessionToken = cookieStore.get("session")?.value;
+  const sessionToken =
+    cookieStore.get("session")?.value;
 
   let purchaseId: string | null = null;
 
@@ -42,17 +37,18 @@ export default async function ProductPage({
     const session = await verifySession(sessionToken);
 
     if (session) {
-      const purchase = await prisma.purchase.findUnique({
-        where: {
-          userId_productId: {
-            userId: session.userId,
-            productId: product.id,
+      const purchase =
+        await prisma.purchase.findUnique({
+          where: {
+            userId_productId: {
+              userId: session.userId,
+              productId: product.id,
+            },
           },
-        },
-        select: {
-          id: true,
-        },
-      });
+          select: {
+            id: true,
+          },
+        });
 
       purchaseId = purchase?.id ?? null;
     }
@@ -83,7 +79,9 @@ export default async function ProductPage({
                 />
               ) : (
                 <div className="text-center">
-                  <div className="text-7xl">📚</div>
+                  <div className="text-7xl">
+                    📚
+                  </div>
 
                   <p className="mt-4 text-sm font-medium text-indigo-500">
                     Study Material
@@ -133,13 +131,10 @@ export default async function ProductPage({
                   </p>
                 </>
               ) : (
-                <>
-                  <BuyNowButton productId={product.id} />
-
-                  <p className="mt-3 text-center text-sm text-slate-500">
-                    Secure digital access after purchase
-                  </p>
-                </>
+                <BuyNowButton
+                  productId={product.id}
+                  productPrice={product.price}
+                />
               )}
             </div>
 
@@ -149,9 +144,17 @@ export default async function ProductPage({
               </h2>
 
               <ul className="mt-3 space-y-2 text-sm text-slate-600">
-                <li>✓ Instant digital access after payment</li>
-                <li>✓ Secure study material</li>
-                <li>✓ Access from your account</li>
+                <li>
+                  ✓ Instant digital access after payment
+                </li>
+
+                <li>
+                  ✓ Secure study material
+                </li>
+
+                <li>
+                  ✓ Access from your account
+                </li>
               </ul>
             </div>
           </div>

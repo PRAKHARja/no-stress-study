@@ -44,6 +44,13 @@ export default function AdminLayout({
           >
             Orders
           </Link>
+
+          <Link
+            href="/admin/coupons"
+            className="block rounded-lg px-4 py-3 text-slate-200 transition hover:bg-slate-800 hover:text-white"
+          >
+            Coupons
+          </Link>
         </nav>
       </aside>
 

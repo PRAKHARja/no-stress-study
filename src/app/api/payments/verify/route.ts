@@ -106,7 +106,7 @@ export async function POST(request: Request) {
     }
 
     // --------------------------------------------------
-    // 6. If already paid, don't create another purchase
+    // 6. If already paid, don't process again
     // --------------------------------------------------
     if (order.status === "PAID") {
       return NextResponse.json({
@@ -133,12 +133,14 @@ export async function POST(request: Request) {
       )
       .digest("hex");
 
-    const signaturesMatch = crypto.timingSafeEqual(
-      Buffer.from(generatedSignature, "utf8"),
-      Buffer.from(razorpaySignature, "utf8")
-    );
-
-    if (!signaturesMatch) {
+    if (
+      generatedSignature.length !==
+        razorpaySignature.length ||
+      !crypto.timingSafeEqual(
+        Buffer.from(generatedSignature, "utf8"),
+        Buffer.from(razorpaySignature, "utf8")
+      )
+    ) {
       return NextResponse.json(
         {
           error: "Payment signature verification failed",
@@ -150,9 +152,10 @@ export async function POST(request: Request) {
     // --------------------------------------------------
     // 8. Verify payment with Razorpay
     // --------------------------------------------------
-    const payment = await razorpay.payments.fetch(
-      razorpayPaymentId
-    );
+    const payment =
+      await razorpay.payments.fetch(
+        razorpayPaymentId
+      );
 
     if (!payment) {
       return NextResponse.json(
@@ -161,23 +164,26 @@ export async function POST(request: Request) {
       );
     }
 
-    // Payment must belong to the same Razorpay order
     if (payment.order_id !== razorpayOrderId) {
       return NextResponse.json(
-        { error: "Payment does not belong to this order" },
+        {
+          error:
+            "Payment does not belong to this order",
+        },
         { status: 400 }
       );
     }
 
-    // Amount must match the amount stored in our database
     if (payment.amount !== order.amount) {
       return NextResponse.json(
-        { error: "Payment amount does not match the order" },
+        {
+          error:
+            "Payment amount does not match the order",
+        },
         { status: 400 }
       );
     }
 
-    // Only successful/captured payments should create purchases
     if (payment.status !== "captured") {
       return NextResponse.json(
         {
@@ -190,6 +196,7 @@ export async function POST(request: Request) {
 
     // --------------------------------------------------
     // 9. Atomically mark order paid + create purchase
+    //    + increment coupon usage
     // --------------------------------------------------
     const result = await prisma.$transaction(
       async (tx) => {
@@ -210,14 +217,17 @@ export async function POST(request: Request) {
           );
         }
 
-        // Protect against duplicate verification requests
+        // Another request may have completed this
+        // payment while we were processing it.
         if (currentOrder.status === "PAID") {
           return {
             alreadyPaid: true,
+            couponUsageUpdated: false,
           };
         }
 
-        // Check whether the user already owns this product
+        // Check whether the user already owns this
+        // product.
         const existingPurchase =
           await tx.purchase.findUnique({
             where: {
@@ -240,10 +250,11 @@ export async function POST(request: Request) {
 
           return {
             alreadyPaid: true,
+            couponUsageUpdated: false,
           };
         }
 
-        // Mark order as paid
+        // Mark order as paid.
         await tx.order.update({
           where: {
             id: currentOrder.id,
@@ -253,7 +264,7 @@ export async function POST(request: Request) {
           },
         });
 
-        // Create purchase
+        // Create purchase.
         const purchase =
           await tx.purchase.create({
             data: {
@@ -263,16 +274,56 @@ export async function POST(request: Request) {
             },
           });
 
+        let couponUsageUpdated = false;
+
+        // Only count the coupon after the purchase
+        // has actually been created.
+        if (currentOrder.couponCode) {
+          const coupon =
+            await tx.coupon.findUnique({
+              where: {
+                code: currentOrder.couponCode,
+              },
+            });
+
+          if (coupon) {
+            if (
+              coupon.usageLimit === null ||
+              coupon.usedCount < coupon.usageLimit
+            ) {
+              await tx.coupon.update({
+                where: {
+                  id: coupon.id,
+                },
+                data: {
+                  usedCount: {
+                    increment: 1,
+                  },
+                },
+              });
+
+              couponUsageUpdated = true;
+            } else {
+              console.warn(
+                "Coupon usage limit reached during payment verification:",
+                {
+                  couponCode:
+                    currentOrder.couponCode,
+                  orderId: currentOrder.id,
+                }
+              );
+            }
+          }
+        }
+
         return {
           alreadyPaid: false,
           purchaseId: purchase.id,
+          couponUsageUpdated,
         };
       }
     );
 
-    // --------------------------------------------------
-    // 10. Return success
-    // --------------------------------------------------
     return NextResponse.json({
       success: true,
       message: "Payment verified successfully",

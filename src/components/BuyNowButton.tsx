@@ -1,10 +1,10 @@
-
 "use client";
 
 import { useRef, useState } from "react";
 
 type BuyNowButtonProps = {
   productId: string;
+  productPrice: number;
 };
 
 type PaymentResponse = {
@@ -50,19 +50,106 @@ declare global {
 }
 
 type Notice = {
-  type: "error" | "warning" | "info";
+  type: "error" | "warning" | "info" | "success";
   message: string;
+};
+
+type CouponState = {
+  code: string;
+  discountAmount: number;
+  finalAmount: number;
 };
 
 export default function BuyNowButton({
   productId,
+  productPrice,
 }: BuyNowButtonProps) {
   const [loading, setLoading] = useState(false);
+  const [couponLoading, setCouponLoading] = useState(false);
+
+  const [couponInput, setCouponInput] = useState("");
+  const [coupon, setCoupon] = useState<CouponState | null>(
+    null
+  );
+
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const paymentFailed = useRef(false);
   const paymentSubmitted = useRef(false);
   const checkoutActive = useRef(false);
+
+  async function applyCoupon() {
+    const code = couponInput.trim().toUpperCase();
+
+    if (!code) {
+      setNotice({
+        type: "error",
+        message: "Please enter a coupon code.",
+      });
+      return;
+    }
+
+    setCouponLoading(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch(
+        "/api/coupons/validate",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            productId,
+            code,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setCoupon(null);
+
+        setNotice({
+          type: "error",
+          message: data.error || "Invalid coupon code.",
+        });
+
+        return;
+      }
+
+      setCoupon({
+        code: data.coupon.code,
+        discountAmount: data.discountAmount,
+        finalAmount: data.finalAmount,
+      });
+
+      setNotice({
+        type: "success",
+        message: `Coupon ${data.coupon.code} applied successfully.`,
+      });
+    } catch (error) {
+      console.error("Coupon validation error:", error);
+
+      setCoupon(null);
+
+      setNotice({
+        type: "error",
+        message:
+          "Unable to validate the coupon. Please try again.",
+      });
+    } finally {
+      setCouponLoading(false);
+    }
+  }
+
+  function removeCoupon() {
+    setCoupon(null);
+    setCouponInput("");
+    setNotice(null);
+  }
 
   async function loadRazorpayScript(): Promise<boolean> {
     if (window.Razorpay) {
@@ -119,7 +206,8 @@ export default function BuyNowButton({
     setNotice(null);
 
     try {
-      const scriptLoaded = await loadRazorpayScript();
+      const scriptLoaded =
+        await loadRazorpayScript();
 
       if (!scriptLoaded) {
         throw new Error(
@@ -136,6 +224,7 @@ export default function BuyNowButton({
           },
           body: JSON.stringify({
             productId,
+            couponCode: coupon?.code || "",
           }),
         }
       );
@@ -160,6 +249,7 @@ export default function BuyNowButton({
           paymentSubmitted.current = true;
 
           setLoading(true);
+
           setNotice({
             type: "info",
             message:
@@ -195,7 +285,8 @@ export default function BuyNowButton({
               );
             }
 
-            window.location.href = "/account/purchases";
+            window.location.href =
+              "/account/purchases";
           } catch (error) {
             console.error(
               "Payment verification error:",
@@ -237,18 +328,21 @@ export default function BuyNowButton({
         },
       });
 
-      razorpay.on("payment.failed", (response) => {
-        paymentFailed.current = true;
+      razorpay.on(
+        "payment.failed",
+        (response) => {
+          paymentFailed.current = true;
 
-        const description =
-          response.error?.description ||
-          "Your payment could not be completed.";
+          const description =
+            response.error?.description ||
+            "Your payment could not be completed.";
 
-        setNotice({
-          type: "error",
-          message: `${description} If money was deducted, check your purchase status before retrying.`,
-        });
-      });
+          setNotice({
+            type: "error",
+            message: `${description} If money was deducted, check your purchase status before retrying.`,
+          });
+        }
+      );
 
       razorpay.open();
     } catch (error) {
@@ -267,16 +361,97 @@ export default function BuyNowButton({
     }
   }
 
+  const displayedAmount =
+    coupon?.finalAmount ?? productPrice;
+
   return (
     <div className="w-full">
-      <button
-        type="button"
-        onClick={handleBuyNow}
-        disabled={loading}
-        className="w-full rounded-xl bg-indigo-600 px-6 py-4 text-lg font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {loading ? "Processing..." : "Buy Now"}
-      </button>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <label
+          htmlFor="coupon-code"
+          className="mb-2 block text-sm font-semibold text-slate-700"
+        >
+          Have a coupon code?
+        </label>
+
+        <div className="flex gap-2">
+          <input
+            id="coupon-code"
+            type="text"
+            value={couponInput}
+            onChange={(event) =>
+              setCouponInput(
+                event.target.value.toUpperCase()
+              )
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                applyCoupon();
+              }
+            }}
+            placeholder="Enter coupon code"
+            disabled={
+              loading ||
+              couponLoading ||
+              Boolean(coupon)
+            }
+            className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-4 py-3 font-medium uppercase text-slate-900 outline-none transition placeholder:normal-case placeholder:font-normal placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-100"
+          />
+
+          {coupon ? (
+            <button
+              type="button"
+              onClick={removeCoupon}
+              disabled={loading}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Remove
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={applyCoupon}
+              disabled={
+                loading ||
+                couponLoading ||
+                !couponInput.trim()
+              }
+              className="rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {couponLoading ? "Checking..." : "Apply"}
+            </button>
+          )}
+        </div>
+
+        {coupon && (
+          <div className="mt-4 space-y-2 text-sm">
+            <div className="flex justify-between text-slate-600">
+              <span>Original price</span>
+              <span>
+                ₹{(productPrice / 100).toFixed(0)}
+              </span>
+            </div>
+
+            <div className="flex justify-between font-medium text-green-600">
+              <span>Discount</span>
+              <span>
+                -₹
+                {(coupon.discountAmount / 100).toFixed(0)}
+              </span>
+            </div>
+
+            <div className="border-t border-slate-200 pt-2">
+              <div className="flex justify-between text-lg font-bold text-slate-900">
+                <span>Total</span>
+                <span>
+                  ₹{(displayedAmount / 100).toFixed(0)}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {notice && (
         <div
@@ -287,7 +462,9 @@ export default function BuyNowButton({
               ? "border-red-200 bg-red-50 text-red-800"
               : notice.type === "warning"
                 ? "border-amber-200 bg-amber-50 text-amber-900"
-                : "border-indigo-200 bg-indigo-50 text-indigo-800"
+                : notice.type === "success"
+                  ? "border-green-200 bg-green-50 text-green-800"
+                  : "border-indigo-200 bg-indigo-50 text-indigo-800"
           }`}
         >
           {notice.message}
@@ -302,6 +479,27 @@ export default function BuyNowButton({
           )}
         </div>
       )}
+
+      <button
+        type="button"
+        onClick={handleBuyNow}
+        disabled={loading || couponLoading}
+        className="mt-4 w-full rounded-xl bg-indigo-600 px-6 py-4 text-lg font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {loading
+          ? "Processing..."
+          : coupon
+            ? `Buy Now — ₹${(
+                displayedAmount / 100
+              ).toFixed(0)}`
+            : `Buy Now — ₹${(
+                productPrice / 100
+              ).toFixed(0)}`}
+      </button>
+
+      <p className="mt-3 text-center text-sm text-slate-500">
+        Secure digital access after purchase
+      </p>
     </div>
   );
 }

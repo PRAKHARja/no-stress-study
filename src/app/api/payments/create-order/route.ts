@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { razorpay } from "@/lib/razorpay";
 import { cookies } from "next/headers";
 import { verifySession } from "@/lib/auth";
+import { calculateCouponDiscount } from "@/lib/coupons";
 
 export async function POST(request: Request) {
   try {
@@ -30,7 +31,15 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
-    const productId = body.productId;
+    const productId =
+      typeof body.productId === "string"
+        ? body.productId.trim()
+        : "";
+
+    const couponCode =
+      typeof body.couponCode === "string"
+        ? body.couponCode.trim()
+        : "";
 
     if (!productId) {
       return NextResponse.json(
@@ -72,9 +81,39 @@ export async function POST(request: Request) {
       );
     }
 
+    let finalAmount = product.price;
+    let discountAmount = 0;
+    let appliedCouponCode: string | null = null;
+
+    if (couponCode) {
+      const couponResult =
+        await calculateCouponDiscount(
+          product.id,
+          couponCode
+        );
+
+      if (!couponResult.valid) {
+        return NextResponse.json(
+          {
+            error: couponResult.error,
+          },
+          { status: 400 }
+        );
+      }
+
+      finalAmount =
+        couponResult.calculation.finalAmount;
+
+      discountAmount =
+        couponResult.calculation.discountAmount;
+
+      appliedCouponCode =
+        couponResult.calculation.code;
+    }
+
     const razorpayOrder =
       await razorpay.orders.create({
-        amount: product.price,
+        amount: finalAmount,
         currency: "INR",
         receipt: `receipt_${product.id}_${Date.now()}`,
       });
@@ -84,7 +123,9 @@ export async function POST(request: Request) {
         userId: session.userId,
         productId: product.id,
         razorpayOrderId: razorpayOrder.id,
-        amount: product.price,
+        amount: finalAmount,
+        discountAmount,
+        couponCode: appliedCouponCode,
         status: "PENDING",
       },
     });
@@ -92,12 +133,18 @@ export async function POST(request: Request) {
     return NextResponse.json({
       orderId: order.id,
       razorpayOrderId: razorpayOrder.id,
-      amount: product.price,
+      amount: finalAmount,
       currency: "INR",
       keyId: process.env.RAZORPAY_KEY_ID,
       product: {
         id: product.id,
         title: product.title,
+      },
+      pricing: {
+        originalAmount: product.price,
+        discountAmount,
+        finalAmount,
+        couponCode: appliedCouponCode,
       },
     });
   } catch (error) {
