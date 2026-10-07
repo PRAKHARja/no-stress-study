@@ -7,6 +7,7 @@ import { verifySession } from "@/lib/auth";
 import { getFileUrl } from "@/lib/r2";
 import SiteHeader from "@/components/SiteHeader";
 import BuyNowButton from "@/components/BuyNowButton";
+import ClaimFreeButton from "@/components/ClaimFreeButton";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +90,7 @@ export default async function ProductPage({
   }
 
   const hasPurchased = Boolean(purchaseId);
+  const isFree = product.price === 0;
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -169,9 +171,15 @@ export default async function ProductPage({
                 Price
               </p>
 
-              <p className="mt-1 text-4xl font-bold text-indigo-600">
-                ₹{(product.price / 100).toFixed(0)}
-              </p>
+              {isFree ? (
+                <p className="mt-1 text-4xl font-bold text-green-600">
+                  FREE
+                </p>
+              ) : (
+                <p className="mt-1 text-4xl font-bold text-indigo-600">
+                  ₹{(product.price / 100).toFixed(0)}
+                </p>
+              )}
             </div>
 
             <div className="mt-8">
@@ -206,6 +214,16 @@ export default async function ProductPage({
                     You already own this study material
                   </p>
                 </>
+              ) : isFree ? (
+                <>
+                  <ClaimFreeButton
+                    productSlug={product.slug}
+                  />
+
+                  <p className="mt-3 text-center text-sm text-slate-500">
+                    No payment required
+                  </p>
+                </>
               ) : (
                 <BuyNowButton
                   productId={product.id}
@@ -221,7 +239,10 @@ export default async function ProductPage({
 
               <ul className="mt-3 space-y-2 text-sm text-slate-600">
                 <li>
-                  ✓ Instant digital access after payment
+                  ✓{" "}
+                  {isFree
+                    ? "Instant digital access"
+                    : "Instant digital access after payment"}
                 </li>
 
                 <li>

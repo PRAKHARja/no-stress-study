@@ -204,7 +204,9 @@ export default async function HomePage({
               {products.length === 0
                 ? "No study materials found."
                 : `${products.length} ${
-                    products.length === 1 ? "material" : "materials"
+                    products.length === 1
+                      ? "material"
+                      : "materials"
                   } available`}
             </p>
           </div>
@@ -247,6 +249,7 @@ export default async function HomePage({
                   ) : (
                     <div className="flex h-full flex-col items-center justify-center">
                       <div className="text-5xl">📚</div>
+
                       <p className="mt-2 text-sm font-semibold text-indigo-500">
                         Study Material
                       </p>
@@ -268,9 +271,15 @@ export default async function HomePage({
                   </p>
 
                   <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
-                    <span className="text-xl font-bold text-indigo-600">
-                      ₹{(product.price / 100).toFixed(0)}
-                    </span>
+                    {product.price === 0 ? (
+                      <span className="text-xl font-bold text-green-600">
+                        FREE
+                      </span>
+                    ) : (
+                      <span className="text-xl font-bold text-indigo-600">
+                        ₹{(product.price / 100).toFixed(0)}
+                      </span>
+                    )}
 
                     <span className="text-sm font-semibold text-slate-500 transition group-hover:text-indigo-600">
                       View →

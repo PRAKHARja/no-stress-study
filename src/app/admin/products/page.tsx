@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+
 import { requireAdmin } from "@/lib/require-admin";
 import { prisma } from "@/lib/prisma";
 import ProductActions from "./ProductActions";
@@ -122,8 +123,16 @@ export default async function AdminProductsPage() {
                       {product.category.name}
                     </td>
 
-                    <td className="px-6 py-4 font-medium text-slate-900">
-                      ₹{(product.price / 100).toFixed(2)}
+                    <td className="px-6 py-4 font-medium">
+                      {product.price === 0 ? (
+                        <span className="font-bold text-green-600">
+                          FREE
+                        </span>
+                      ) : (
+                        <span className="text-slate-900">
+                          ₹{(product.price / 100).toFixed(2)}
+                        </span>
+                      )}
                     </td>
 
                     <td className="px-6 py-4 text-sm text-slate-500">
